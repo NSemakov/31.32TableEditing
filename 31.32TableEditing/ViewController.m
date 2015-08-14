@@ -22,9 +22,9 @@
      self.tableView=tableView;
     
     //edge insets
-    UIEdgeInsets inset=UIEdgeInsetsMake(20, 0, 0, 0);
-    tableView.contentInset=inset;
-    tableView.scrollIndicatorInsets=inset;
+    //UIEdgeInsets inset=UIEdgeInsetsMake(20, 0, 0, 0);
+    //tableView.contentInset=inset;
+    //tableView.scrollIndicatorInsets=inset;
     
      [self.view addSubview:tableView];
     self.tableView.delegate=self;
@@ -50,12 +50,49 @@
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
-    
+    //UINavigationItem* item=[[UINavigationItem alloc]initWithTitle:@"Students"];
+    UIBarButtonItem* buttonEdit=[[UIBarButtonItem alloc]initWithBarButtonSystemItem:UIBarButtonSystemItemEdit target:self action:@selector(actionEdit:)];
+    [self.navigationItem setRightBarButtonItem:buttonEdit];
+    self.navigationItem.title=@"Students";
+    UIBarButtonItem* buttonAddSection=[[UIBarButtonItem alloc]initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(actionAddSection:)];
+    self.navigationItem.leftBarButtonItem=buttonAddSection;
     
 }
 
-
+#pragma mark - action
+- (void) actionEdit:(UIBarButtonItem*) button{
+    [self.tableView setEditing:!self.tableView.editing animated:YES];
+    UIBarButtonSystemItem buttonType=UIBarButtonSystemItemEdit;
+    if (self.tableView.isEditing) {
+        buttonType=UIBarButtonSystemItemDone;
+    }
+    UIBarButtonItem* buttonDone=[[UIBarButtonItem alloc]initWithBarButtonSystemItem:buttonType target:self action:@selector(actionEdit:)];
+    [self.navigationItem setRightBarButtonItem:buttonDone];
+    
+}
+- (void) actionAddSection:(UIBarButtonItem*) button {
+    NVGroup* newGroup=[[NVGroup alloc]init];
+    
+    [self.arrayOfGroups insertObject:newGroup atIndex:0];
+    //[self.arrayOfGroups addObject:newGroup];
+    [self.tableView beginUpdates];
+    NSIndexSet *indexSet=[NSIndexSet indexSetWithIndex:0/*[self.arrayOfGroups count]-1*/];
+    [self.tableView insertSections:indexSet withRowAnimation:UITableViewRowAnimationLeft];
+    /*
+    NSRange range=NSMakeRange(0, [self.arrayOfGroups count]);
+    indexSet=[NSIndexSet indexSetWithIndexesInRange:range];
+    [self.tableView reloadSections:indexSet withRowAnimation:UITableViewRowAnimationFade];
+    */
+    [self.tableView endUpdates];
+    [self.tableView reloadData];
+    [[UIApplication sharedApplication]beginIgnoringInteractionEvents];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3f * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if ([[UIApplication sharedApplication] isIgnoringInteractionEvents]) {
+            [[UIApplication sharedApplication] endIgnoringInteractionEvents];
+        }
+    });
+    
+}
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
     // Dispose of any resources that can be recreated.
@@ -76,8 +113,43 @@
 }
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section{
     return [NSString stringWithFormat:@"Group #%ld",section];
+    
+}
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath{
+    return indexPath.row>=1;
+}
+- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath{
+    return indexPath.row>=1;
+}
+- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath{
+    
+    if (destinationIndexPath.section==sourceIndexPath.section) {
+        //NVStudent* currentStudent=[self studentInGroupByIndexPath:sourceIndexPath];
+        NVGroup* currentGroup=[self.arrayOfGroups objectAtIndex:sourceIndexPath.section];
+        NSMutableArray *tempArray=[NSMutableArray arrayWithArray:currentGroup.students];
+        /*
+        [tempArray removeObject:currentStudent];
+        [tempArray insertObject:currentStudent atIndex:destinationIndexPath.row];
+        */
+        [tempArray exchangeObjectAtIndex:sourceIndexPath.row-1 withObjectAtIndex:destinationIndexPath.row-1];
+        currentGroup.students=tempArray;
+        
+    } else {
+        NVStudent* currentStudent=[self studentInGroupByIndexPath:sourceIndexPath];
+        NVGroup* sourceGroup=[self.arrayOfGroups objectAtIndex:sourceIndexPath.section];
+        NSMutableArray *tempSourceArray=[NSMutableArray arrayWithArray:sourceGroup.students];
+        
+        NVGroup* destinationGroup=[self.arrayOfGroups objectAtIndex:destinationIndexPath.section];
+        NSMutableArray *tempDestinationArray=[NSMutableArray arrayWithArray:destinationGroup.students];
+        
+        [tempSourceArray removeObject:currentStudent];
+        [tempDestinationArray insertObject:currentStudent atIndex:destinationIndexPath.row-1];
+        sourceGroup.students=tempSourceArray;
+        destinationGroup.students=tempDestinationArray;
+    }
 }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
+    
     NVGroup *group=nil;
     if ([self.arrayOfGroups count]){
         group=[self.arrayOfGroups objectAtIndex:section];
@@ -118,10 +190,65 @@
         }
         
     }
+    
     return cell;
 }
-
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath{
+    if (editingStyle==UITableViewCellEditingStyleDelete) {
+        NVStudent* student=[self studentInGroupByIndexPath:indexPath];
+        NVGroup *group=[self.arrayOfGroups objectAtIndex:indexPath.section];
+        NSMutableArray *tempArray=[NSMutableArray arrayWithArray:group.students];
+        [tempArray removeObject:student];
+        group.students=tempArray;
+        [self.tableView beginUpdates];
+        
+        [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationRight];
+        [self.tableView endUpdates];
+    }
+}
 
 #pragma mark -UITableViewDelegate
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath{
+    
+    cell.frame=CGRectMake(0-CGRectGetWidth(cell.frame), CGRectGetMinY(cell.frame), CGRectGetWidth(cell.frame), CGRectGetHeight(cell.frame));
 
+    [UIView animateWithDuration:0.3 delay:0.1 options:0 animations:^{
+        cell.backgroundColor=[UIColor blueColor];
+        cell.frame=CGRectMake(0,CGRectGetMinY(cell.frame), CGRectGetWidth(cell.frame), CGRectGetHeight(cell.frame));
+        
+        
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.2 delay:0 options:0 animations:^{
+            cell.backgroundColor=[UIColor clearColor];
+        } completion:nil];
+    }];
+    
+}
+- (NSIndexPath *)tableView:(UITableView *)tableView targetIndexPathForMoveFromRowAtIndexPath:(NSIndexPath *)sourceIndexPath toProposedIndexPath:(NSIndexPath *)proposedDestinationIndexPath{
+    if (proposedDestinationIndexPath.row==0) {
+        return sourceIndexPath;
+    } else {
+        return proposedDestinationIndexPath;
+    }
+}
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (indexPath.row==0) {
+        NVGroup* currentGroup=[self.arrayOfGroups objectAtIndex:indexPath.section];
+        NSMutableArray *tempArray=[NSMutableArray arrayWithArray:currentGroup.students] ;
+        NVStudent* newStudent=[[NVStudent alloc]initRandomStudent];
+        [tempArray addObject:newStudent];
+        currentGroup.students=tempArray;
+        [tableView beginUpdates];
+        NSIndexPath *newIndexPath=[NSIndexPath indexPathForRow:[currentGroup.students count] inSection:indexPath.section];
+        
+        [tableView insertRowsAtIndexPaths:@[newIndexPath] withRowAnimation:UITableViewRowAnimationLeft];
+        [tableView endUpdates];
+    }
+}
+/*
+- (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath{
+    return UITableViewCellEditingStyleNone;
+}
+ */
 @end
